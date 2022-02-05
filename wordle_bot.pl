@@ -17,10 +17,10 @@ update_possible_guesses_list(List) :- retractall(guessWords(_)), assert(guessWor
 import :- 
     retractall(generationWords(_)), retractall(guessWords(_)), retractall(data(_, _)),
     cd('C:/Users/DT Mark/Documents/Game Development/Projects/Wordle Bot/prolog-wordle-simulator'),
-    csv_read_file('generation_table.csv', GenerationRows, [functor(gen), arity(2)]), maplist(assert, GenerationRows),
+    csv_read_file('Words/generation_table.csv', GenerationRows, [functor(gen), arity(2)]), maplist(assert, GenerationRows),
     findall(Word, isGenWord(Word), GenerationWords), assert(generationWords(GenerationWords)),
     retractall(gen(_, _)),
-    csv_read_file('guess_table.csv', Rows, [functor(wordFrequency), arity(2)]), maplist(assert, Rows),
+    csv_read_file('Words/guess_table.csv', Rows, [functor(wordFrequency), arity(2)]), maplist(assert, Rows),
     findall(Word, isGuessWord(Word), GuessWords), assert(guessWords(GuessWords)).
 
 % ----------------------------------------------------------------------------------------------------------------- %
@@ -33,7 +33,7 @@ save :-
 map_item(P, row(C1, C2)) :- P = [C1, C2].
 export :- 
     get_time(TimeStamp), format_time(string(Time), '%d%m%Y_%H%M%S', TimeStamp), 
-    string_concat("output_", Time, OutFileName1), string_concat(OutFileName1, ".csv", OutFileName), 
+    string_concat("Output/output_", Time, OutFileName1), string_concat(OutFileName1, ".csv", OutFileName), 
     string_to_atom(OutFileName, OutFile),
     findall([C1, C2], data(C1, C2), Data),
     maplist(map_item, Data, Rows),
@@ -180,7 +180,7 @@ computer_letter_score([Letter|_], I, _, _, nokeep) :-
 computer_letter_score([Letter|_], _, _, _, nokeep) :-
     greyLetter(Letter).
 computer_letter_score([Letter|Rest], I, Score, NextScore, Keep) :-
-    (greenLetter(Letter, I) -> NScore is Score + 2 ; NScore is Score),
+    (greenLetter(Letter, I) -> NScore is Score + 10 ; NScore is Score),
     (orangeLetter(Letter, P), I \== P -> NNScore is NScore + 1 ; NNScore is NScore),
     NextI is I + 1,
     computer_letter_score(Rest, NextI, NNScore, NextScore, Keep).
