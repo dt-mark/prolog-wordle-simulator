@@ -1,4 +1,4 @@
-:- dynamic runs/1, generationWords/1, guessWords/1, generatedWord/1, guessCount/1, orangeLetter/2, greenLetter/2, greyLetter/1, wordFrequency/2, wordScore/2, gen/2.
+:- dynamic data/2, generationWords/1, guessWords/1, generatedWord/1, guessCount/1, orangeLetter/2, greenLetter/2, greyLetter/1, wordFrequency/2, wordScore/2, gen/2.
 
 % ----------------------------------------------------------------------------------------------------------------- %
 % Global predicates ----------------------------------------------------------------------------------------------- %
@@ -9,15 +9,14 @@ isGenWord(Word) :- gen(Word, _).
 isGuessWord(Word) :- wordFrequency(Word, _).
 isRelevantWord(Word) :- wordScore(Word, _).
 increment_count :- guessCount(Count), retractall(guessCount(_)), NewCount is Count + 1, assert(guessCount(NewCount)).
-increment_runs :- runs(N), retractall(runs(_)), NewN is N + 1, assert(runs(NewN)).
 update_possible_guesses_list(List) :- retractall(guessWords(_)), assert(guessWords(List)).
 
 % ----------------------------------------------------------------------------------------------------------------- %
 % Import databases into the program ------------------------------------------------------------------------------- %
 % ----------------------------------------------------------------------------------------------------------------- %
 import :- 
-    retractall(generationWords(_)), retractall(guessWords(_)),
-    cd('C:/Users/DT Mark/Documents/Game Development/Projects/Wordle Bot'),
+    retractall(generationWords(_)), retractall(guessWords(_)), retractall(data(_, _)),
+    cd('C:/Users/DT Mark/Documents/Game Development/Projects/Wordle Bot/prolog-wordle-simulator'),
     csv_read_file('generation_table.csv', GenerationRows, [functor(gen), arity(2)]), maplist(assert, GenerationRows),
     findall(Word, isGenWord(Word), GenerationWords), assert(generationWords(GenerationWords)),
     retractall(gen(_, _)),
@@ -27,28 +26,29 @@ import :-
 % ----------------------------------------------------------------------------------------------------------------- %
 % Export data to csv file ----------------------------------------------------------------------------------------- %
 % ----------------------------------------------------------------------------------------------------------------- %
+save :-
+    generatedWord(GeneratedWord), guessCount(Count),
+    assert(data(GeneratedWord, Count)).
+
+map_item(P, row(C1, C2)) :- P = [C1, C2].
 export :- 
-    generatedWord(GeneratedWord), guessCount(C),
-    get_time(TimeStamp), append('output_', TimeStamp, OutFileName), append(OutFileName, '.csv', OutFile),
-    csv_write_stream(OutFile, [row(GeneratedWord, C)], []).
+    get_time(TimeStamp), format_time(string(Time), '%d%m%Y_%H%M%S', TimeStamp), 
+    string_concat("output_", Time, OutFileName1), string_concat(OutFileName1, ".csv", OutFileName), 
+    string_to_atom(OutFileName, OutFile),
+    findall([C1, C2], data(C1, C2), Data),
+    maplist(map_item, Data, Rows),
+    csv_write_file(OutFile, Rows, []).
 
 % ----------------------------------------------------------------------------------------------------------------- %
-% Launch a batch of games ----------------------------------------------------------------------------------------- %
+% Launch a batch of games and export them ------------------------------------------------------------------------- %
 % ----------------------------------------------------------------------------------------------------------------- %
-launch :- assert(runs(0)), play.
-    
-% ----------------------------------------------------------------------------------------------------------------- %
-% Export and decide what to do at the end of a game: keep playing, or end it -------------------------------------- %
-% ----------------------------------------------------------------------------------------------------------------- %
-end :- 
-    increment_runs,
-    runs(N),
-    (
-        N < 100 ->
-            play
-        ;
-            true                
-    ).
+launch(0) :- 
+    export.
+launch(N) :-
+    play,
+    save,
+    NextN is N - 1,
+    launch(NextN). 
 
 % ----------------------------------------------------------------------------------------------------------------- %
 % Initialise a game by resetting global variables, generating a word, and launching guesses ----------------------- %
@@ -61,8 +61,7 @@ play :-
     assert(guessCount(0)),
     generationWords(GenerationWords), random_member(GeneratedWord, GenerationWords), !, assert(generatedWord(GeneratedWord)),
     write('-----'), nl, write(GeneratedWord), nl, write('-----'), nl,
-    guess, !,
-    end.
+    guess, !.
 
 % ----------------------------------------------------------------------------------------------------------------- %
 % Sort words by score --------------------------------------------------------------------------------------------- %
