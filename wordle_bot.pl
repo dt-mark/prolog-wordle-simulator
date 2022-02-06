@@ -1,4 +1,4 @@
-:- dynamic data/2, generationWords/1, guessWords/1, generatedWord/1, guessCount/1, orangeLetter/2, greenLetter/2, greyLetter/1, wordFrequency/2, wordScore/2, gen/2.
+:- dynamic data/2, generationWords/1, guessWords/1, generatedWord/1, guessCount/1, orangeLetter/2, greenLetter/2, greyLetter/1, wordFrequency/2, letterFrequency/7, wordScore/2, gen/2, wordLetterFrequency/2.
 
 % ----------------------------------------------------------------------------------------------------------------- %
 % Global predicates ----------------------------------------------------------------------------------------------- %
@@ -21,7 +21,8 @@ import :-
     findall(Word, isGenWord(Word), GenerationWords), assert(generationWords(GenerationWords)),
     retractall(gen(_, _)),
     csv_read_file('Words/guess_table.csv', Rows, [functor(wordFrequency), arity(2)]), maplist(assert, Rows),
-    findall(Word, isGuessWord(Word), GuessWords), assert(guessWords(GuessWords)).
+    findall(Word, isGuessWord(Word), GuessWords), assert(guessWords(GuessWords)),
+    csv_read_file('Words/letter_table.csv', LetterRows, [functor(letterFrequency), arity(7)]), maplist(assert, LetterRows).
 
 % ----------------------------------------------------------------------------------------------------------------- %
 % Export data to csv file ----------------------------------------------------------------------------------------- %
@@ -81,6 +82,7 @@ guess :-
     guessCount(Count),
     (
         Count == 0 -> 
+            % random_member(GuessWord, PossibleWords)
             GuessWord = orate 
         ;
             sort_words_by_score(PossibleWords, SortedPossibleWords),
@@ -160,11 +162,13 @@ update_word_scores :-
 update_word_scores_1([]).
 update_word_scores_1([Word|Rest]) :-
     atom_string(Word, WS), string_to_list(WS, WordList),
-    computer_letter_score(WordList, 0, 0, LetterScore, Keep),
+    compute_letter_hint_score(WordList, 0, 0, LetterHintScore, Keep),
     (
         Keep == keep -> 
-            wordFrequency(Word, Frequency),
-            Score is LetterScore + 0.5*Frequency, 
+            compute_letter_frequency_score(WordList, 0, 0, LetterFrequencyScore),
+            compute_letter_uniqueness_Score(WordList, LetterUniquenessScore),
+            compute_word_frequency_score(Word, WordFrequencyScore),
+            Score is 100*LetterHintScore + 10*LetterUniquenessScore + 5*WordFrequencyScore + LetterFrequencyScore,
             assert(wordScore(Word, Score)) 
         ; 
             true
@@ -172,15 +176,44 @@ update_word_scores_1([Word|Rest]) :-
     update_word_scores_1(Rest).
 
 % ----------------------------------------------------------------------------------------------------------------- %
-% Compute letter score for a given score -------------------------------------------------------------------------- %
+% Compute letter hint score for a given word ---------------------------------------------------------------------- %
 % ----------------------------------------------------------------------------------------------------------------- %
-computer_letter_score([], _, Score, Score, keep).
-computer_letter_score([Letter|_], I, _, _, nokeep) :-
+compute_letter_hint_score([], _, Score, Score, keep).
+compute_letter_hint_score([Letter|_], I, _, _, nokeep) :-
     orangeLetter(Letter, I).
-computer_letter_score([Letter|_], _, _, _, nokeep) :-
+compute_letter_hint_score([Letter|_], _, _, _, nokeep) :-
     greyLetter(Letter).
-computer_letter_score([Letter|Rest], I, Score, NextScore, Keep) :-
+compute_letter_hint_score([Letter|Rest], I, Score, NextScore, Keep) :-
     (greenLetter(Letter, I) -> NScore is Score + 10 ; NScore is Score),
     (orangeLetter(Letter, P), I \== P -> NNScore is NScore + 1 ; NNScore is NScore),
     NextI is I + 1,
-    computer_letter_score(Rest, NextI, NNScore, NextScore, Keep).
+    compute_letter_hint_score(Rest, NextI, NNScore, NextScore, Keep).
+
+% ----------------------------------------------------------------------------------------------------------------- %
+% Compute letter frequency score for a given word ----------------------------------------------------------------- %
+% ----------------------------------------------------------------------------------------------------------------- %
+compute_letter_frequency_score([], _, Score, Score).
+compute_letter_frequency_score([Letter|Rest], I, Score, NextScore) :-
+    char_code(Atom, Letter),
+    letterFrequency(Atom, F1, F2, F3, F4, F5, _),
+    (I == 0 -> NScore is Score * F1 ; true),
+    (I == 1 -> NScore is Score * F2 ; true),
+    (I == 2 -> NScore is Score * F3 ; true),
+    (I == 3 -> NScore is Score * F4 ; true),
+    (I == 4 -> NScore is Score * F5 ; true),
+    NextI is I + 1,
+    compute_letter_frequency_score(Rest, NextI, NScore, NextScore).
+
+% ----------------------------------------------------------------------------------------------------------------- %
+% Compute letter uniqueness score for a given word ---------------------------------------------------------------- %
+% ----------------------------------------------------------------------------------------------------------------- %
+compute_letter_uniqueness_Score(WordList, Score) :-
+    list_to_set(WordList, WordSet),
+    length(WordSet, L),
+    Score is L / 5.
+
+% ----------------------------------------------------------------------------------------------------------------- %
+% Compute word frequency score for a given word ------------------------------------------------------------------- %
+% ----------------------------------------------------------------------------------------------------------------- %
+compute_word_frequency_score(Word, Score) :-
+    wordFrequency(Word, Score).
