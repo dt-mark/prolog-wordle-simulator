@@ -1,9 +1,9 @@
 # prolog-wordle-simulator
 
-Simple implementation of a Wordle simulator in PROLOG.
+Simple implementation of a Wordle simulator in Prolog.
 
 ## Usage
 
 Use `?- import.` to load the lists of words.
 
-Use `?- launch(N)` to launch a batch of `N` simulations. The results will be exported to an output_[timestamp].csv file at the end.
+Use `?- run.` to launch a full batch of 2314 simulations. The results will be exported to an output_[timestamp].csv file at the end.
