@@ -1,4 +1,4 @@
-:- dynamic data/2, generationWords/1, guessWords/1, generatedWord/1, guessCount/1, orangeLetter/2, greenLetter/2, greyLetter/1, wordFrequency/2, letterFrequency/7, wordScore/2, gen/2, wordLetterFrequency/2.
+:- dynamic data/2, generationWords/1, guessWords/1, generatedWord/1, guessCount/1, orangeLetter/2, greenLetter/2, greyLetter/1, wordFrequency/2, letterFrequency/7, wordScore/2, gen/2.
 
 % ----------------------------------------------------------------------------------------------------------------- %
 % Global predicates ----------------------------------------------------------------------------------------------- %
@@ -15,11 +15,11 @@ update_possible_guesses_list(List) :- retractall(guessWords(_)), assert(guessWor
 % Import databases into the program ------------------------------------------------------------------------------- %
 % ----------------------------------------------------------------------------------------------------------------- %
 import :- 
-    retractall(generationWords(_)), retractall(guessWords(_)), retractall(data(_, _)),
+    retractall(generationWords(_)), retractall(guessWords(_)), retractall(data(_, _)), retractall(gen(_, _)),
+    retractall(wordFrequency(_, _)), retractall(letterFrequency(_, _, _, _, _, _, _)),
     cd('C:/Users/DT Mark/Documents/Game Development/Projects/Wordle Bot/prolog-wordle-simulator'),
     csv_read_file('Words/generation_table.csv', GenerationRows, [functor(gen), arity(2)]), maplist(assert, GenerationRows),
     findall(Word, isGenWord(Word), GenerationWords), assert(generationWords(GenerationWords)),
-    retractall(gen(_, _)),
     csv_read_file('Words/guess_table.csv', Rows, [functor(wordFrequency), arity(2)]), maplist(assert, Rows),
     findall(Word, isGuessWord(Word), GuessWords), assert(guessWords(GuessWords)),
     csv_read_file('Words/letter_table.csv', LetterRows, [functor(letterFrequency), arity(7)]), maplist(assert, LetterRows).
@@ -43,10 +43,16 @@ export :-
 % ----------------------------------------------------------------------------------------------------------------- %
 % Launch a batch of games and export them ------------------------------------------------------------------------- %
 % ----------------------------------------------------------------------------------------------------------------- %
+run :-
+    retractall(data(_, _)),
+    generationWords(GenerationWords),
+    length(GenerationWords, L),
+    StartN is L - 1,
+    launch(StartN).
 launch(0) :- 
     export.
 launch(N) :-
-    play,
+    play(N),
     save,
     NextN is N - 1,
     launch(NextN). 
@@ -54,14 +60,15 @@ launch(N) :-
 % ----------------------------------------------------------------------------------------------------------------- %
 % Initialise a game by resetting global variables, generating a word, and launching guesses ----------------------- %
 % ----------------------------------------------------------------------------------------------------------------- %
-play :- 
+play(N) :- 
     retractall(generatedWord(_)), retractall(guessCount(_)), 
     retractall(orangeLetter(_, _)), retractall(greenLetter(_, _)), retractall(greyLetter(_)),
     retractall(wordScore(_, _)), retractall(guessWords(_)),
+    % generationWords(GenerationWords), random_member(GeneratedWord, GenerationWords), !, assert(generatedWord(GeneratedWord)),
+    generationWords(GenerationWords), nth0(N, GenerationWords, GeneratedWord), !, assert(generatedWord(GeneratedWord)),
+    write('-----'), nl, write(GeneratedWord), nl, write('-----'), nl,
     findall(Word, isGuessWord(Word), GuessWords), assert(guessWords(GuessWords)),
     assert(guessCount(0)),
-    generationWords(GenerationWords), random_member(GeneratedWord, GenerationWords), !, assert(generatedWord(GeneratedWord)),
-    write('-----'), nl, write(GeneratedWord), nl, write('-----'), nl,
     guess, !.
 
 % ----------------------------------------------------------------------------------------------------------------- %
@@ -83,7 +90,7 @@ guess :-
     (
         Count == 0 -> 
             % random_member(GuessWord, PossibleWords)
-            GuessWord = orate 
+            GuessWord = crane 
         ;
             sort_words_by_score(PossibleWords, SortedPossibleWords),
             nth0(0, SortedPossibleWords, GuessWord)
@@ -162,13 +169,14 @@ update_word_scores :-
 update_word_scores_1([]).
 update_word_scores_1([Word|Rest]) :-
     atom_string(Word, WS), string_to_list(WS, WordList),
-    compute_letter_hint_score(WordList, 0, 0, LetterHintScore, Keep),
+    compute_letter_hint_score1(WordList, 0, 0, LetterHintScore1, Keep),
     (
         Keep == keep -> 
-            compute_letter_frequency_score(WordList, 0, 0, LetterFrequencyScore),
+            compute_letter_hint_score2(WordList, LetterHintScore2),
             compute_letter_uniqueness_Score(WordList, LetterUniquenessScore),
             compute_word_frequency_score(Word, WordFrequencyScore),
-            Score is 100*LetterHintScore + 10*LetterUniquenessScore + 5*WordFrequencyScore + LetterFrequencyScore,
+            %compute_letter_frequency_score(WordList, 0, 0, LetterFrequencyScore),
+            Score is 5000*(2*LetterHintScore1 + LetterHintScore2) + 1000*WordFrequencyScore + 5*LetterUniquenessScore,
             assert(wordScore(Word, Score)) 
         ; 
             true
@@ -178,17 +186,21 @@ update_word_scores_1([Word|Rest]) :-
 % ----------------------------------------------------------------------------------------------------------------- %
 % Compute letter hint score for a given word ---------------------------------------------------------------------- %
 % ----------------------------------------------------------------------------------------------------------------- %
-compute_letter_hint_score([], _, Score, Score, keep).
-compute_letter_hint_score([Letter|_], I, _, _, nokeep) :-
+compute_letter_hint_score1([], _, Score, Score, keep).
+compute_letter_hint_score1([Letter|_], I, _, _, nokeep) :-
     orangeLetter(Letter, I).
-compute_letter_hint_score([Letter|_], _, _, _, nokeep) :-
+compute_letter_hint_score1([Letter|_], _, _, _, nokeep) :-
     greyLetter(Letter).
-compute_letter_hint_score([Letter|Rest], I, Score, NextScore, Keep) :-
-    (greenLetter(Letter, I) -> NScore is Score + 10 ; NScore is Score),
-    (orangeLetter(Letter, P), I \== P -> NNScore is NScore + 1 ; NNScore is NScore),
+compute_letter_hint_score1([Letter|Rest], I, Score, NextScore, Keep) :-
+    (greenLetter(Letter, I) -> NScore is Score + 1; NScore is Score),
     NextI is I + 1,
-    compute_letter_hint_score(Rest, NextI, NNScore, NextScore, Keep).
-
+    compute_letter_hint_score1(Rest, NextI, NScore, NextScore, Keep).
+compute_letter_hint_score2(GuessWordList, Score) :-
+    findall(L, orangeLetter(L, _), OrangeHints),
+    list_to_set(GuessWordList, GuessWordSet),
+    intersection(GuessWordSet, OrangeHints, Intersection),
+    length(Intersection, Score).
+    
 % ----------------------------------------------------------------------------------------------------------------- %
 % Compute letter frequency score for a given word ----------------------------------------------------------------- %
 % ----------------------------------------------------------------------------------------------------------------- %
